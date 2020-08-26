@@ -27,12 +27,16 @@ def get_libraries(plex):
     movies.sort(key=lambda x: x.addedAt or x.updatedAt)
     shows = plex.search(libtype="show")
     shows.sort(key=lambda x: x.addedAt or x.updatedAt)
+    albums = plex.search(libtype="album")
+    albums.sort(key=lambda x: x.addedAt or x.updatedAt)
+    tracks = plex.search(libtype="track")
+    tracks.sort(key=lambda x: x.addedAt or x.updatedAt)
 
     return {
-        "movies": movies,
-        "movie_titles": [movie.title for movie in movies],
-        "shows": shows,
-        "show_titles": [show.title for show in shows],
+        "movies": {"media": movies, "titles": [movie.title for movie in movies]},
+        "shows": {"media": shows, "titles": [show.title for show in shows]},
+        "albums": {"media": albums, "titles": [album.title for album in albums]},
+        "tracks": {"media": tracks, "titles": [track.title for track in tracks]},
         "updated": datetime.now(),
     }
 
@@ -45,7 +49,7 @@ def fuzzy(media, lib, scorer=fuzz.QRatio):
         return ["", 0]
 
 
-def video_selection(option, media, lib):
+def media_selection(option, media, lib):
     """ Return media item.
     Narrow it down if season, episode, unwatched, or latest is used
     """
@@ -99,6 +103,23 @@ def video_selection(option, media, lib):
         if media.type == "show" or media.type == "season":
             media = media.episodes()[-1]
 
+    if media.type == "album":
+        # If asking for a particular track or chapter number
+        if option["track"]:
+            media = media.tracks()[int(option["track"])-1]
+        # If audiobook, best effort to try to continue where they left off
+        elif any(x.tag == "Audiobook" for x in media.genres):
+            tracks = media.tracks()
+            min_view_count = min([track.viewCount for track in tracks])
+
+            # Grab least played partially completed track. API doesn't have isWatched so viewCount will have to do
+            # View offset is undocumented officially, but is the number of milliseconds since the last saved checkpoint
+            media = next((track for track in tracks if track.viewCount == min_view_count and track.viewOffset > 0), None)
+
+            # Otherwise grab the first least played track of the album
+            if not media:
+                media = next((track for track in tracks if track.viewCount == min_view_count), None)
+
     if isinstance(media, list):
         media = media[0]
 
@@ -115,29 +136,33 @@ def find_media(selected, media, lib):
     result = ""
     library = ""
     if selected["library"]:
-        if selected["library"][0].type == 'show':
-            section = "show_titles"
-        else:
-            section = "movie_titles"
+        if media:
+            result = fuzzy(media, selected["library"]["titles"], fuzz.WRatio)[0]
 
-        if not media:
-            result = ""
-        else:
-            result = fuzzy(media, lib[section], fuzz.WRatio)[0]
-
-        library = selected["library"]
+        library = selected["library"]["media"]
     else:
-        if not media:
-            result = ""
-        else:
-            show_test = fuzzy(media, lib["show_titles"], fuzz.WRatio)
-            movie_test = fuzzy(media, lib["movie_titles"], fuzz.WRatio)
-            if show_test[1] > movie_test[1]:
-                result = show_test[0]
-                library = lib["shows"]
-            else:
-                result = movie_test[0]
-                library = lib["movies"]
+        if media:
+            show_test = fuzzy(media, lib["shows"]["titles"], fuzz.WRatio)
+            movie_test = fuzzy(media, lib["movies"]["titles"], fuzz.WRatio)
+            album_test = fuzzy(media, lib["albums"]["titles"], fuzz.WRatio)
+            track_test = fuzzy(media, lib["tracks"]["titles"], fuzz.WRatio)
+
+            best = show_test
+            library = lib["shows"]
+
+            if movie_test[1] > best[1]:
+                best = movie_test
+                library = lib["movies"]["media"]
+
+            if album_test[1] > best[1]:
+                best = album_test
+                library = lib["albums"]["media"]
+
+            if track_test[1] > best[1]:
+                best = track_test
+                library = lib["tracks"]["media"]
+
+            result = best[0]
     return {"media": result, "library": library}
 
 
@@ -147,7 +172,6 @@ def convert_ordinals(command, item, ordinals):
     Example: "third season of Friends" becomes "season 3 Friends"
     """
     match = ""
-    replacement = ""
     for word in item["keywords"]:
         for ordinal in ordinals.keys():
             if ordinal not in ('pre', 'post') and ordinal in command:
@@ -176,8 +200,9 @@ def convert_ordinals(command, item, ordinals):
     return command.strip()
 
 
-def get_season_episode_num(command, item, ordinals):
-    """ Find and return season/episode number.
+def get_command_num(command, item, ordinals):
+    """ Find and return command number.
+    These can be season, episode, chapter, or track numbers.
     Then remove keyword and number from command string.
     """
     command = convert_ordinals(command, item, ordinals)
@@ -264,6 +289,10 @@ def get_library(phrase, lib, localize, devices):
         return lib["shows"]
     elif any(word in phrase for word in localize["movies"]):
         return lib["movies"]
+    elif any(word in phrase for word in localize["albums"]):
+        return lib["albums"]
+    elif any(word in phrase for word in localize["tracks"]):
+        return lib["tracks"]
     return None
 
 
@@ -283,6 +312,7 @@ def is_device(command, media_list, separator):
 
 def get_media_and_device(localize, command, lib, library, default_cast):
     """ Find and return the media item and cast device. """
+
     media = None
     device = default_cast
     separator = localize["separator"]["keywords"][0]
@@ -295,14 +325,12 @@ def get_media_and_device(localize, command, lib, library, default_cast):
     separator = " " + separator + " "
     if separator in command:
         device = False
-        if library == lib["shows"]:
-            device = is_device(command, lib["show_titles"], separator)
-        elif library == lib["movies"]:
-            device = is_device(command, lib["movie_titles"], separator)
+        if library is not None:
+            device = is_device(command, library["titles"], separator)
         else:
             device = is_device(
                 command,
-                lib["movie_titles"] + lib["show_titles"],
+                lib["movies"]["titles"] + lib["shows"]["titles"] + lib["albums"]["titles"] + lib["tracks"]["titles"],
                 separator
             )
 
@@ -312,6 +340,7 @@ def get_media_and_device(localize, command, lib, library, default_cast):
             device = split[-1]
 
     media = media if media else command
+
     return {"media": media, "device": device}
 
 

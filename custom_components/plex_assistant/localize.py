@@ -11,6 +11,15 @@ LOCALIZE = {
             "tv",
             "show"
         ],
+        "albums": [
+            "book",
+            "album",
+            "audiobook"
+            "chapter"
+        ],
+        "tracks": [
+            "song",
+        ],
 
         # Controls
         "controls": {
@@ -38,6 +47,12 @@ LOCALIZE = {
             "play show",
             "play the",
             "play",
+            "listen to",
+            "listen to the track"
+            "listen to the book",
+            "listen to the album",
+            "listen to the song"
+            "listen to the audiobook"
         ],
 
         # Ordinal Numbers to Integers
@@ -81,6 +96,23 @@ LOCALIZE = {
             "keywords": [
                 "episodes",
                 "episode",
+            ],
+            "pre": [
+                'st',
+                'nd',
+                'rd',
+                'th',
+                'the',
+            ],
+            "post": [
+                "number",
+                "of",
+            ],
+        },
+        "track": {
+            "keywords": [
+                "chapter",
+                "track",
             ],
             "pre": [
                 'st',

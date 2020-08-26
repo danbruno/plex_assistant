@@ -55,7 +55,7 @@ def setup(hass, config):
     from pychromecast.controllers.plex import PlexController
 
     from .helpers import (cc_callback, find_media, fuzzy, get_libraries,
-                          media_error, video_selection)
+                          media_error, media_selection)
     from .localize import LOCALIZE
     from .process_speech import process_speech
     from datetime import datetime
@@ -180,7 +180,7 @@ def setup(hass, config):
 
         try:
             result = find_media(command, command["media"], PA.lib)
-            media = video_selection(command, result["media"],
+            media = media_selection(command, result["media"],
                                     result["library"])
         except Exception:
             error = media_error(command, localize)
@@ -200,17 +200,22 @@ def setup(hass, config):
 
         _LOGGER.debug("Media: %s", str(media))
 
+        offset = 0
+
+        if media.type == "track":
+            offset = media.viewOffset
+
         if client:
             _LOGGER.debug("Client: %s", cast)
             cast.proxyThroughServer()
             plex_c = cast
-            plex_c.playMedia(media)
+            plex_c.playMedia(media, offset)
         else:
             _LOGGER.debug("Cast: %s", cast.name)
             plex_c = PlexController()
             cast.register_handler(plex_c)
             cast.wait()
-            plex_c.play_media(media)
+            plex_c.play_media(media, offset=offset)
 
         update_sensor()
 

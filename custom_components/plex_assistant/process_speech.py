@@ -1,5 +1,5 @@
 from .helpers import (_find, _remove, get_library, get_media_and_device,
-                      get_season_episode_num, fuzzy)
+                      get_command_num, fuzzy)
 
 
 def process_speech(command, localize, default_cast, PA):
@@ -11,6 +11,7 @@ def process_speech(command, localize, default_cast, PA):
     library = None
     episode = ""
     season = ""
+    track = ""
     remote = ""
     device = ""
 
@@ -55,7 +56,7 @@ def process_speech(command, localize, default_cast, PA):
 
     if _find(localize["season"], command):
         library = lib["shows"]
-        result = get_season_episode_num(
+        result = get_command_num(
             command, localize["season"], localize["ordinals"]
         )
         season = result["number"]
@@ -63,10 +64,18 @@ def process_speech(command, localize, default_cast, PA):
 
     if _find(localize["episode"], command):
         library = lib["shows"]
-        result = get_season_episode_num(
+        result = get_command_num(
             command, localize["episode"], localize["ordinals"]
         )
         episode = result["number"]
+        command = result["command"]
+
+    if _find(localize["track"], command):
+        library = lib["albums"]
+        result = get_command_num(
+            command, localize["track"], localize["ordinals"]
+        )
+        track = result["number"]
         command = result["command"]
 
     result = get_media_and_device(
@@ -77,6 +86,7 @@ def process_speech(command, localize, default_cast, PA):
         "device": result["device"],
         "season": season,
         "episode": episode,
+        "track": track,
         "latest": latest,
         "unwatched": unwatched,
         "library": library,
