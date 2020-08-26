@@ -215,7 +215,7 @@ def setup(hass, config):
             plex_c = PlexController()
             cast.register_handler(plex_c)
             cast.wait()
-            plex_c.play_media(media, offset=offset)
+            plex_c.play_media(media, offset=(offset/1000))
 
         update_sensor()
 
